@@ -1,0 +1,8 @@
+# The full-length opening theme. The build uses the shortened cut, and a 6.4 MB
+# unused file would sit in the history for good — history does not shrink when
+# you delete a file later.
+Moonlight over the ancient bridge.mp3
+
+# scratch
+*.tmp
+*.bak
