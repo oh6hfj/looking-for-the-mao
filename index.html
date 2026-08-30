@@ -809,6 +809,62 @@ body{
   font-weight:500;
 }
 
+/* ----------------------------------------------- Ping-Pong Diplomacy --- */
+#frenzyBanner{
+  position:absolute;
+  z-index:34;
+  left:50%;
+  top:22%;
+  transform:translateX(-50%);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:.2rem;
+  pointer-events:none;
+  text-align:center;
+  opacity:0;
+  transition:opacity .28s ease, transform .28s ease;
+}
+#frenzyBanner.on{ opacity:1; transform:translateX(-50%) scale(1); }
+#frenzyBanner:not(.on){ transform:translateX(-50%) scale(.9); }
+.fb-main{
+  font-family:var(--serif);
+  font-size:clamp(1.4rem,6vw,2.4rem);
+  line-height:1;
+  color:var(--gold);
+  text-shadow:0 2px 0 rgba(20,24,28,.85), 0 0 26px rgba(201,162,39,.6);
+  letter-spacing:.01em;
+}
+.fb-sub{
+  font-size:var(--t-xs);
+  letter-spacing:.22em;
+  text-transform:uppercase;
+  color:var(--rice);
+  text-shadow:0 1px 3px rgba(0,0,0,.8);
+}
+/* the seal keeps time while it lasts */
+#frenzyBanner.on ~ #hud .seal,
+body:has(#frenzyBanner.on) .seal{
+  animation:sealPulse .5s ease-in-out infinite alternate;
+}
+@keyframes sealPulse{
+  from{ box-shadow:0 1px 0 rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.18); }
+  to  { box-shadow:0 1px 0 rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.18),
+                   0 0 0 .38rem rgba(201,162,39,.45); }
+}
+/* a spare lantern arriving */
+#strikes.granted .lantern{ animation:lanternPop .55s ease; }
+@keyframes lanternPop{
+  0%{ transform:scale(1); }
+  40%{ transform:scale(1.35); filter:brightness(1.5); }
+  100%{ transform:scale(1); }
+}
+@media (prefers-reduced-motion: reduce){
+  #frenzyBanner{ transition:none; }
+  body:has(#frenzyBanner.on) .seal{ animation:none; }
+  #strikes.granted .lantern{ animation:none; }
+}
+
 /* ------------------------------------------------- the panda's reprisal --- */
 #pandaSlate{
   position:absolute; inset:0; z-index:48;
@@ -908,6 +964,23 @@ body{
   text-wrap:balance;
   max-width:22ch;
 }
+.bestline{
+  margin:0 0 .5rem;
+  font-family:var(--mono);
+  font-size:var(--t-xs);
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  color:#6c716d;
+  font-variant-numeric:tabular-nums;
+}
+.bestline.is-new{
+  color:#F6EEDC;
+  background:var(--vermilion);
+  display:inline-block;
+  padding:.2rem .55rem .24rem;
+  border-radius:2px;
+}
+
 .card p.lede{
   font-size:var(--t-sm);
   line-height:1.55;
@@ -1213,6 +1286,12 @@ button:focus-visible{ outline:2px solid var(--ink); outline-offset:2px; }
   <button id="muteBtn" title="Mute / unmute" aria-label="Mute or unmute sound">&#9835;</button>
   <div id="soundPill" class="hidden">&#9834; Tap for sound</div>
 
+  <!-- the combo reward, named for the 1971 table-tennis exchange -->
+  <div id="frenzyBanner" class="hidden" aria-hidden="true">
+    <span class="fb-main">Ping-Pong Diplomacy</span>
+    <span class="fb-sub">Double points &middot; no pandas</span>
+  </div>
+
   <!-- the panda's reprisal: shown while the game is frozen as a penalty -->
   <div id="pandaSlate" class="hidden" aria-live="polite">
     <div class="ps-inner">
@@ -1252,6 +1331,40 @@ var TAU = Math.PI * 2;
 /* Matched to panda.mp3: its audible content runs to 2356 ms in two bursts,
    with a lull around 1.5 s. A shorter hold cut the slate off mid-punchline. */
 var PANDA_PAUSE_MS = 2500;
+
+/* --- upgrade tuning, all in one place ----------------------------------- */
+var WHAMMY_MULT   = 3;        /* a Mao struck again in mid-air is worth this */
+var FRENZY_AT     = 10;       /* combo that triggers Ping-Pong Diplomacy */
+var FRENZY_MS     = 6000;
+var FRENZY_MULT   = 2;
+var FRENZY_UP     = 4;        /* Maos allowed up at once during it */
+var LIFE_FIRST    = 15000;    /* first spare lantern at this score */
+var LIFE_EVERY    = 5000;     /* and one more every this many after */
+var LIFE_MAX      = 6;        /* the HUD row stops looking like a row past this */
+
+/* Personal best, kept in the browser. Storage throws in private windows and
+   when site data is blocked, so every access is guarded and the game has to
+   work perfectly well with no best at all. */
+var Best = {
+  KEY: "mao.best.v1",
+  get: function () {
+    try {
+      var v = JSON.parse(localStorage.getItem(this.KEY) || "null");
+      if (v && typeof v.score === "number") return v;
+    } catch (e) {}
+    return null;
+  },
+  set: function (rec) {
+    try { localStorage.setItem(this.KEY, JSON.stringify(rec)); } catch (e) {}
+  },
+  /* returns true when this run beat the stored one */
+  submit: function (rec) {
+    var old = this.get();
+    if (old && old.score >= rec.score) return false;
+    this.set(rec);
+    return true;
+  }
+};
 var clamp = function (v, a, b) { return v < a ? a : v > b ? b : v; };
 var lerp  = function (a, b, t) { return a + (b - a) * t; };
 var easeOutCubic = function (t) { return 1 - Math.pow(1 - t, 3); };
@@ -2868,6 +2981,10 @@ var Game = {
 
   score: 0, hits: 0, swings: 0, escapes: 0, pandasHit: 0,
   pausedUntil: 0, pauseStart: 0,
+  maxEscapes: 3,          /* grows as spare lanterns are earned */
+  livesAwarded: 0,
+  whammies: 0,
+  frenzyUntil: 0, frenzies: 0,
   combo: 0, bestCombo: 0,
   rtSum: 0, rtCount: 0, rtBest: Infinity, rtLast: 0,
   startedAt: 0,
@@ -2990,6 +3107,9 @@ var Game = {
   /* --------------------------------------------------------------- flow */
   reset: function () {
     this.score = 0; this.hits = 0; this.swings = 0; this.escapes = 0; this.pandasHit = 0;
+    this.maxEscapes = 3; this.livesAwarded = 0; this.whammies = 0;
+    this.frenzyUntil = 0; this.frenzies = 0;
+    $("frenzyBanner").classList.add("hidden");
     this.combo = 0; this.bestCombo = 0;
     this.rtSum = 0; this.rtCount = 0; this.rtBest = Infinity; this.rtLast = 0;
     this.maos = []; this.fx = []; this.floaters = [];
@@ -3030,6 +3150,67 @@ var Game = {
   },
 
   /* -------------------------------------------------------------- spawns */
+  /* Every point goes through here so spare lanterns can never be missed —
+     the first at LIFE_FIRST, then one per LIFE_EVERY after it. */
+  award: function (points) {
+    this.score += points;
+    var due = this.score < LIFE_FIRST
+      ? 0
+      : 1 + Math.floor((this.score - LIFE_FIRST) / LIFE_EVERY);
+    due = Math.min(due, LIFE_MAX - 3);
+    while (this.livesAwarded < due) {
+      this.livesAwarded++;
+      this.maxEscapes++;
+      this.grantLantern();
+    }
+  },
+
+  grantLantern: function () {
+    Audio_.gong();
+    this.floaters.push({
+      text: "SPARE LANTERN", x: this.w / 2, y: this.h * 0.30, t: 0, dur: 1.6,
+      col: "#E0453F", size: Math.max(18, this.unit * 0.5)
+    });
+    var strikes = $("strikes");
+    strikes.classList.add("granted");
+    setTimeout(function () { strikes.classList.remove("granted"); }, 900);
+    this.syncHud();
+  },
+
+  inFrenzy: function () {
+    return this.frenzyUntil > performance.now();
+  },
+
+  /* Ping-Pong Diplomacy: a long streak opens a short window where the rocks
+     are crowded, everything is worth double, and no panda will show up to
+     punish you for swinging freely. */
+  checkFrenzy: function (px, py) {
+    if (this.combo < FRENZY_AT) return;
+    if (this.inFrenzy()) return;
+    if (this.combo % FRENZY_AT !== 0) return;      /* re-arms every 10 */
+    this.frenzyUntil = performance.now() + FRENZY_MS;
+    this.frenzies++;
+    Audio_.gong();
+
+    var b = $("frenzyBanner");
+    b.classList.remove("hidden");
+    setTimeout(function () { b.classList.add("on"); }, 20);
+
+    this.floaters.push({
+      text: "×" + FRENZY_MULT, x: px, y: py - this.unit, t: 0, dur: 1.0,
+      col: "#F0D470", size: this.unit * 0.6, mono: true
+    });
+    /* fill the rocks straight away rather than waiting on the spawn timer */
+    this.nextSpawn = 0;
+  },
+
+  endFrenzy: function () {
+    this.frenzyUntil = 0;
+    var b = $("frenzyBanner");
+    b.classList.remove("on");
+    setTimeout(function () { b.classList.add("hidden"); }, 320);
+  },
+
   difficulty: function () {
     var secs = (performance.now() - this.startedAt) / 1000;
     return clamp(secs / 75 + this.hits / 40, 0, 1);
@@ -3046,6 +3227,9 @@ var Game = {
     if (roll > 0.94) variant = "gold";
     else if (roll > 0.82) variant = "panda";
     else if (roll > 0.58) variant = "cap";
+    /* No pandas during Ping-Pong Diplomacy. The reward for a long streak is
+       being able to swing at everything without checking first. */
+    if (variant === "panda" && this.inFrenzy()) variant = "cap";
 
     var up = lerp(1.15, 0.52, d) * (variant === "cap" ? 0.78 : 1) * (variant === "gold" ? 0.62 : 1);
     /* A panda stays up a good while and never speeds up with difficulty. The
@@ -3074,7 +3258,13 @@ var Game = {
   scheduleNext: function () {
     var d = this.difficulty();
     var gap = lerp(0.85, 0.30, d) * (0.7 + Math.random() * 0.7);
+    if (this.inFrenzy()) gap *= 0.34;      /* crowd the rocks */
     this.nextSpawn = performance.now() + gap * 1000;
+  },
+
+  /* how many may be up at once */
+  upLimit: function () {
+    return this.inFrenzy() ? FRENZY_UP : 2 + Math.round(this.difficulty() * 1.5);
   },
 
   /* ---------------------------------------------------------------- input */
@@ -3098,7 +3288,10 @@ var Game = {
     var hit = null, best = Infinity;
     for (var i = 0; i < this.maos.length; i++) {
       var m = this.maos[i];
-      if (m.hit || m.phase === "gone") continue;
+      if (m.phase === "gone") continue;
+      /* already-struck Maos are skipped, EXCEPT one still in the air that has
+         not been whammied yet */
+      if (m.hit && !(m.phase === "fly" && !m.whammied)) continue;
       var p = this.maoHead(m);
       if (!p) continue;
       var dx = e.clientX - p.x, dy = e.clientY - p.y;
@@ -3126,6 +3319,12 @@ var Game = {
       var rise = this.riseAmount(m);
       /* head centre sits 1.02u above the origin in local space */
       return { x: m.hole.x, y: this.originY(m.hole, rise) - u * 1.02, r: u * 1.15 };
+    }
+    /* A struck Mao stays hittable while it spins away — catch it in mid-air
+       for the double whammy. Slightly tighter circle than on the ground: it
+       should be a skill shot, not a freebie. */
+    if (m.phase === "fly" && !m.whammied && m.flyX != null) {
+      return { x: m.flyX, y: m.flyY - m.hole.u * 1.02, r: m.hole.u * 1.0 };
     }
     return null;
   },
@@ -3196,8 +3395,51 @@ var Game = {
     this.syncHud();
   },
 
+  /* --- the double whammy: catching one you already hit, in mid-air -------- */
+  registerWhammy: function (m, px, py) {
+    m.whammied = true;
+    this.whammies++;
+    this.hits++;
+    this.combo++;
+    if (this.combo > this.bestCombo) this.bestCombo = this.combo;
+
+    /* belt it properly this time */
+    m.vx *= 1.5;
+    m.vy = -(360 + Math.random() * 160);
+    m.spin *= 1.9;
+
+    var base = Math.round(100 * WHAMMY_MULT);
+    var mult = 1 + Math.min(this.combo - 1, 12) * 0.1;
+    if (this.inFrenzy()) mult *= FRENZY_MULT;
+    var gained = Math.round(base * mult);
+    this.award(gained);
+
+    Audio_.smack(this.combo + 8);        /* pitched up — it should sound sweeter */
+
+    this.fx.push({ kind: "ring", x: px, y: py, t: 0, dur: 0.5, u: m.hole.u, gold: true });
+    for (var i = 0; i < 16; i++) {
+      var a = Math.random() * TAU, s = 120 + Math.random() * 360;
+      this.fx.push({
+        kind: "spark", x: px, y: py, t: 0, dur: 0.38 + Math.random() * 0.3,
+        vx: Math.cos(a) * s, vy: Math.sin(a) * s - 70,
+        col: Math.random() > 0.4 ? "#F0D470" : "#E8DFC9",
+        r: 1.8 + Math.random() * 2.8
+      });
+    }
+    this.floaters.push({
+      text: "DOUBLE WHAMMY", x: px, y: py - m.hole.u * 1.3, t: 0, dur: 1.1,
+      col: "#F0D470", size: m.hole.u * 0.38
+    });
+    this.floaters.push({
+      text: "+" + gained, x: px, y: py - m.hole.u * 0.5, t: 0, dur: 0.9,
+      col: "#F0D470", size: m.hole.u * 0.5, mono: true
+    });
+    this.checkFrenzy(px, py);
+  },
+
   registerHit: function (m, px, py) {
     if (m.variant === "panda") { this.registerPandaHit(m, px, py); return; }
+    if (m.hit && m.phase === "fly") { this.registerWhammy(m, px, py); return; }
     m.hit = true;
     m.hitT = 0.001;
     m.phase = "fly";
@@ -3222,8 +3464,9 @@ var Game = {
     var mult = 1 + Math.min(this.combo - 1, 12) * 0.1;
     if (m.variant === "cap")  mult *= 1.5;
     if (m.variant === "gold") mult *= 3;
+    if (this.inFrenzy())      mult *= FRENZY_MULT;
     var gained = Math.round((100 + speedBonus) * mult);
-    this.score += gained;
+    this.award(gained);
 
     Music.intensity = this.combo >= 5 ? 1 : 0;
     Audio_.smack(this.combo);
@@ -3243,6 +3486,7 @@ var Game = {
       col: m.variant === "gold" ? "#F0D470" : "#F2EAD6", size: m.hole.u * 0.5,
       mono: true
     });
+    this.checkFrenzy(px, py);
     if (this.combo >= 3) {
       this.floaters.push({
         text: "×" + this.combo, x: px, y: py - m.hole.u * 1.25, t: 0, dur: 0.8,
@@ -3278,7 +3522,7 @@ var Game = {
       col: "#E0453F", size: m.hole.u * 0.34
     });
     this.syncHud();
-    if (this.escapes >= 3) this.gameOver();
+    if (this.escapes >= this.maxEscapes) this.gameOver();
   },
 
   /* ---------------------------------------------------------------- loop */
@@ -3335,9 +3579,17 @@ var Game = {
     }
 
     if (this.stage === "play") {
+      if (this.frenzyUntil && now >= this.frenzyUntil) this.endFrenzy();
       if (!this.nextSpawn) this.scheduleNext();
       if (now >= this.nextSpawn) {
-        this.spawn();
+        /* count only those actually showing, so the frenzy can crowd the rocks
+           without the ordinary game ever feeling swarmed */
+        var upNow = 0;
+        for (var q = 0; q < this.maos.length; q++) {
+          var ph = this.maos[q].phase;
+          if (ph === "rise" || ph === "up") upNow++;
+        }
+        if (upNow < this.upLimit()) this.spawn();
         this.scheduleNext();
       }
     }
@@ -3465,7 +3717,9 @@ var Game = {
       if (f.kind === "ring") {
         g.strokeStyle = f.jade
           ? "rgba(120,180,120," + (1 - p) * 0.85 + ")"
-          : "rgba(224,69,63," + (1 - p) * 0.9 + ")";
+          : f.gold
+            ? "rgba(240,212,112," + (1 - p) * 0.95 + ")"
+            : "rgba(224,69,63," + (1 - p) * 0.9 + ")";
         g.lineWidth = (1 - p) * f.u * 0.26 + 1.5;
         g.beginPath();
         g.arc(f.x, f.y, f.u * (0.35 + p * 1.5), 0, TAU);
@@ -3643,9 +3897,19 @@ var Game = {
     $("hHits").textContent = this.hits;
     $("hAcc").textContent = this.swings ? Math.round(this.hits / this.swings * 100) + "%" : "—";
     $("hRt").textContent = this.rtCount ? Math.round(this.rtSum / this.rtCount) + "ms" : "—";
-    var lan = document.querySelectorAll("#strikes .lantern");
-    for (var i = 0; i < lan.length; i++) {
-      lan[i].classList.toggle("out", i < this.escapes);
+    /* the row grows as spare lanterns are earned, so it is rebuilt rather than
+       toggled over a fixed three */
+    var strikes = $("strikes");
+    while (strikes.children.length < this.maxEscapes) {
+      var el = document.createElement("i");
+      el.className = "lantern";
+      strikes.appendChild(el);
+    }
+    while (strikes.children.length > this.maxEscapes) {
+      strikes.removeChild(strikes.lastChild);
+    }
+    for (var i = 0; i < strikes.children.length; i++) {
+      strikes.children[i].classList.toggle("out", i < this.escapes);
     }
   },
 
@@ -3661,19 +3925,33 @@ var Game = {
     var ov = $("overlay");
     var acc = this.accuracy();
     var rank = this.rankFor(this.score);
+    var prev = Best.get();
+    this.beatBest = Best.submit({
+      score: this.score, hits: this.hits,
+      acc: Math.round(acc), streak: this.bestCombo,
+      rt: this.rtCount ? this.avgRt() : 0
+    });
+    var bestLine = this.beatBest
+      ? '<p class="bestline is-new">New personal best' +
+          (prev ? ' — beat ' + prev.score.toLocaleString("en-US") : '') + '</p>'
+      : (prev ? '<p class="bestline">Your best: ' + prev.score.toLocaleString("en-US") + '</p>' : '');
+
     ov.innerHTML =
       '<div class="card">' +
         '<div class="stamp">終</div>' +
-        '<p class="eyebrow">Transmission lost · three got away</p>' +
+        '<p class="eyebrow">Transmission lost · ' + this.maxEscapes + ' got away</p>' +
         '<h2>Game Over</h2>' +
-        '<p class="lede">Three Maos slipped back behind the rocks. ' +
+        bestLine +
+        '<p class="lede">' + this.maxEscapes + ' Maos got away' +
+          (this.whammies ? ', though ' + this.whammies + ' never made it back down' : '') +
+          '. ' +
+          (this.frenzies ? 'Diplomacy broke out ' + this.frenzies + '&times;. ' : '') +
           (this.pandasHit === 1
-            ? 'You also hit a panda, which cost you half of everything. '
+            ? 'A panda took a hit, and half your score with it. '
             : this.pandasHit > 1
-              ? 'You also hit ' + this.pandasHit + ' pandas, which is ' +
-                this.pandasHit + ' more than anyone should. '
+              ? this.pandasHit + ' pandas took hits, which is ' + this.pandasHit + ' too many. '
               : '') +
-          'Your result enters the Wall of Shame at number ' + rank + '.</p>' +
+          'Number ' + rank + ' on the Wall of Shame.</p>' +
         '<div class="statgrid">' +
           '<div class="stat"><span class="lbl">Score</span><span class="val">' + this.score.toLocaleString("en-US") + '</span></div>' +
           '<div class="stat"><span class="lbl">Hits</span><span class="val">' + this.hits + '</span></div>' +
