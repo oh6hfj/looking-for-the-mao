@@ -1720,11 +1720,28 @@ var Audio_ = {
   rally: function () {
     if (!this.running()) return;
     var self = this;
-    for (var i = 0; i < 6; i++) {
-      (function (n) {
-        setTimeout(function () { self.smack(n * 4); }, n * 78);
-      })(i);
-    }
+    /* Six evenly-spaced pings rising 1.0 to 1.23 was the first attempt, and it
+       failed: that is the same pitch range an ordinary combo hit uses, so the
+       fanfare was made of the exact sound the game is already making. It has
+       to leave that range and accelerate to read as an announcement rather
+       than as more hitting. */
+    var steps = [
+      { t:   0, rate: 0.82, g: 0.55 },
+      { t: 110, rate: 1.02, g: 0.62 },
+      { t: 205, rate: 1.28, g: 0.70 },
+      { t: 290, rate: 1.60, g: 0.80 },
+      { t: 360, rate: 1.98, g: 0.90 },
+      { t: 415, rate: 2.42, g: 1.00 }
+    ];
+    steps.forEach(function (s) {
+      setTimeout(function () {
+        if (!self.playSample("ping", s.rate, s.g)) self.smackSynth(0);
+      }, s.t);
+    });
+    /* and a bright cap so the run of pings clearly lands somewhere */
+    setTimeout(function () {
+      if (!self.playSample("tingsha", 1.5, 0.5)) self.tingsha();
+    }, 470);
   },
 
   /* Earning a spare lantern. Deliberately NOT the gong: the gong means the run
