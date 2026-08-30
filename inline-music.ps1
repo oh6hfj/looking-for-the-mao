@@ -93,7 +93,8 @@ if ($Panda -and (Test-Path $Panda)) {
 foreach ($one in @(
     @{ base = "gong";   var = "GONG_SRC";   label = "gong (over)" },
     @{ base = "whiff";  var = "WHIFF_SRC";  label = "whiff      " },
-    @{ base = "escape"; var = "ESCAPE_SRC"; label = "escaped    " })) {
+    @{ base = "escape";  var = "ESCAPE_SRC";  label = "escaped    " },
+    @{ base = "tingsha"; var = "TINGSHA_SRC"; label = "tingsha    " })) {
   $om2 = [regex]::Match($page, ('var ' + $one.var + ' = "[^"]*";'))
   if (-not $om2.Success) { throw ("could not find " + $one.var + " in index.html") }
   $hit = Get-ChildItem -Path $PSScriptRoot -File -ErrorAction SilentlyContinue |
@@ -133,7 +134,7 @@ if (-not $Audio) {
   foreach ($e in $exts) {
     $found += Get-ChildItem -Path $PSScriptRoot -Filter $e -File -ErrorAction SilentlyContinue
   }
-  $found = $found | Where-Object { $_.BaseName -notin @("gong","whiff","escape") -and
+  $found = $found | Where-Object { $_.BaseName -notin @("gong","whiff","escape","tingsha") -and
     $_.BaseName -ine "ping" -and $_.BaseName -ine "panda" -and
     $_.BaseName -notmatch '(?i)moonlight|ancient bridge'
   }
