@@ -1047,6 +1047,26 @@ body:has(#frenzyBanner.on) .seal{
 }
 #playerName:focus-visible{ outline:2px solid var(--vermilion); outline-offset:1px; }
 
+.wallnote{
+  margin:.75rem 0 0;
+  font-size:var(--t-xs);
+  letter-spacing:.06em;
+  color:#7d8279;
+}
+.linkish{
+  font:inherit;
+  background:none;
+  border:0;
+  padding:0;
+  color:#8d1f24;
+  text-transform:none;
+  letter-spacing:inherit;
+  text-decoration:underline;
+  cursor:pointer;
+  border-radius:0;
+}
+.linkish:hover{ background:none; color:var(--vermilion); }
+
 .btnrow{ display:flex; gap:.6rem; flex-wrap:wrap; }
 button{
   font-family:var(--sans);
@@ -1121,6 +1141,14 @@ button:focus-visible{ outline:2px solid var(--ink); outline-offset:2px; }
   font-variant-numeric:tabular-nums;
   white-space:nowrap;
 }
+/* your earlier runs sit on the wall too, marked but quieter than this one */
+.wall tr.mine td{
+  background:rgba(192,39,45,.05);
+  color:#4a3f3c;
+}
+.wall tr.mine td.who{ color:#2b2320; }
+.wall tr.mine td.rank{ color:#a8887f; }
+
 .wall tr.you td{
   background:rgba(192,39,45,.13);
   color:#7d1f24;
@@ -1345,27 +1373,69 @@ var LIFE_FIRST    = 15000;    /* first spare lantern at this score */
 var LIFE_EVERY    = 5000;     /* and one more every this many after */
 var LIFE_MAX      = 6;        /* the HUD row stops looking like a row past this */
 
-/* Personal best, kept in the browser. Storage throws in private windows and
-   when site data is blocked, so every access is guarded and the game has to
-   work perfectly well with no best at all. */
-var Best = {
-  KEY: "mao.best.v1",
-  get: function () {
+/* Your own runs, kept in the browser so the Wall of Shame survives closing the
+   tab. localStorage rather than a cookie: cookies are sent with every request,
+   are capped near 4 KB, and are the wrong tool for local-only data.
+   Every access is guarded — storage throws outright in private windows and
+   wherever site data is blocked — and the game works perfectly with none. */
+var Scores = {
+  KEY: "mao.scores.v1",
+  KEEP: 8,                 /* enough to feel like a history, not enough to bury the dictators */
+
+  all: function () {
     try {
-      var v = JSON.parse(localStorage.getItem(this.KEY) || "null");
-      if (v && typeof v.score === "number") return v;
+      var v = JSON.parse(localStorage.getItem(this.KEY) || "[]");
+      if (Object.prototype.toString.call(v) === "[object Array]") {
+        return v.filter(function (r) { return r && typeof r.score === "number"; });
+      }
     } catch (e) {}
-    return null;
+    return [];
   },
-  set: function (rec) {
-    try { localStorage.setItem(this.KEY, JSON.stringify(rec)); } catch (e) {}
+
+  save: function (list) {
+    try { localStorage.setItem(this.KEY, JSON.stringify(list)); } catch (e) {}
   },
-  /* returns true when this run beat the stored one */
-  submit: function (rec) {
-    var old = this.get();
-    if (old && old.score >= rec.score) return false;
-    this.set(rec);
-    return true;
+
+  best: function () {
+    var a = this.all();
+    if (!a.length) return null;
+    return a.slice().sort(function (x, y) { return y.score - x.score; })[0];
+  },
+
+  /* Records the run and returns it. Keeps only the top KEEP, so a long night
+     of bad runs cannot push a good one off the wall. */
+  add: function (rec) {
+    var list = this.all();
+    list.push(rec);
+    list.sort(function (x, y) { return y.score - x.score; });
+    if (list.length > this.KEEP) list.length = this.KEEP;
+    this.save(list);
+    return rec;
+  },
+
+  /* the name is typed after the run ends, so the stored record is renamed */
+  rename: function (id, name) {
+    var list = this.all(), changed = false;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === id) { list[i].name = name; changed = true; }
+    }
+    if (changed) this.save(list);
+  },
+
+  clear: function () {
+    try { localStorage.removeItem(this.KEY); } catch (e) {}
+  },
+
+  /* A title earned by whatever the run was most notable for. Checked in order,
+     so the most characterful thing wins rather than the highest number. */
+  epithet: function (r) {
+    if (r.pandas)            return "Enemy of the Panda";
+    if (r.whammies >= 3)     return "The Double-Hander";
+    if (r.streak >= FRENZY_AT) return "Diplomat of the Table";
+    if (r.acc >= 90)         return "The Unerring";
+    if (r.score >= 20000)    return "Scourge of the Rocks";
+    if (r.score < 2000)      return "Barely Present";
+    return "Liberator of the Ping-Pong Table";
   }
 };
 var clamp = function (v, a, b) { return v < a ? a : v > b ? b : v; };
@@ -4001,12 +4071,15 @@ var Game = {
     var ov = $("overlay");
     var acc = this.accuracy();
     var rank = this.rankFor(this.score);
-    var prev = Best.get();
-    this.beatBest = Best.submit({
-      score: this.score, hits: this.hits,
-      acc: Math.round(acc), streak: this.bestCombo,
-      rt: this.rtCount ? this.avgRt() : 0
+    /* record the run before anything else reads the table */
+    var prev = Scores.best();
+    this.runId = "r" + Date.now();
+    this.run = Scores.add({
+      id: this.runId, name: "COMRADE", score: this.score, hits: this.hits,
+      acc: Math.round(acc), streak: this.bestCombo, whammies: this.whammies,
+      pandas: this.pandasHit, rt: this.rtCount ? this.avgRt() : 0
     });
+    this.beatBest = !prev || this.score > prev.score;
     var bestLine = this.beatBest
       ? '<p class="bestline is-new">New personal best' +
           (prev ? ' — beat ' + prev.score.toLocaleString("en-US") : '') + '</p>'
@@ -4060,19 +4133,37 @@ var Game = {
 
   showWall: function () {
     this.stage = "wall";
+    /* The name is typed on the results card, so it is copied to the stored
+       record on the way here. Only when that input actually exists: opening
+       the wall a second time has no card behind it, and blindly falling back
+       to the default renamed the run to COMRADE after you had named it. */
     var nameEl = $("playerName");
-    var who = (nameEl && nameEl.value.trim()) ? nameEl.value.trim().toUpperCase() : "COMRADE";
-    var mine = { name: who, epithet: "Liberator of the Ping-Pong Table", score: this.score, you: true };
+    if (nameEl && this.runId) {
+      var typed = nameEl.value.trim().toUpperCase();
+      Scores.rename(this.runId, typed || "COMRADE");
+    }
 
-    var list = WALL_OF_SHAME.slice();
-    list.push(mine);
+    /* every run this browser remembers, not just the one just played */
+    var self = this;
+    var mine = Scores.all().map(function (r) {
+      return {
+        name: r.name || "COMRADE",
+        epithet: Scores.epithet(r),
+        score: r.score,
+        mine: true,
+        you: r.id === self.runId
+      };
+    });
+
+    var list = WALL_OF_SHAME.slice().concat(mine);
     list.sort(function (a, b) { return b.score - a.score; });
 
     var rows = "";
     for (var i = 0; i < list.length; i++) {
       var e = list[i];
+      var cls = e.you ? "you" : (e.mine ? "mine" : "");
       rows +=
-        '<tr class="' + (e.you ? "you" : "") + '">' +
+        '<tr class="' + cls + '">' +
           '<td class="rank">' + (i + 1) + '</td>' +
           '<td class="who">' + escapeHtml(e.name) +
             '<span>' + escapeHtml(e.epithet) + '</span></td>' +
@@ -4096,8 +4187,20 @@ var Game = {
           '<button id="againB">Play again</button>' +
           '<button class="ghost" id="replayIntro">Replay intro</button>' +
         '</div>' +
+        '<p class="wallnote">Your runs are kept in this browser only. ' +
+          '<button type="button" id="forgetScores" class="linkish">Forget them</button></p>' +
       '</div>';
     ov.classList.remove("hidden");
+
+    var forget = $("forgetScores");
+    if (forget) {
+      forget.addEventListener("click", function (e) {
+        e.stopPropagation();
+        Scores.clear();
+        self.runId = null;
+        self.showWall();
+      });
+    }
 
     /* your own row is what you came to see — bring it into view */
     var mineRow = ov.querySelector(".wall tr.you");
