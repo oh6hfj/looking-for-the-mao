@@ -3293,8 +3293,17 @@ var Game = {
        point is that you had time to look and chose to swing anyway — a panda
        that flashed past would just be a reflex tax. */
     if (variant === "panda") up = 1.5;
+    /* Anything that appears during Ping-Pong Diplomacy carries a free ride:
+       it lingers longer AND cannot cost a strike if it gets away. The frenzy
+       throws up four at once at triple the spawn rate, so charging for the
+       ones you cannot reach turned the reward for a 25-streak into the most
+       dangerous six seconds of the run. The flag rides on the Mao rather than
+       on the clock, so one that outlives the frenzy is still free. */
+    var freeRide = this.inFrenzy();
+    if (freeRide) up *= 1.35;
     hole.busy = true;
     this.maos.push({
+      freeRide: freeRide,
       hole: hole,
       variant: variant,
       phase: "rise",
@@ -3570,6 +3579,16 @@ var Game = {
   },
 
   registerEscape: function (m) {
+    /* A frenzy Mao getting away costs nothing at all — not a strike, not the
+       combo. Shown in grey rather than vermilion so it is legible at a glance
+       that this one did not hurt. */
+    if (m.freeRide) {
+      this.floaters.push({
+        text: "ESCAPED", x: m.hole.x, y: m.hole.y - m.hole.u * 1.4, t: 0, dur: 0.7,
+        col: "rgba(159,176,179,0.75)", size: m.hole.u * 0.3
+      });
+      return;
+    }
     this.escapes++;
     this.combo = 0;
     Music.intensity = 0;
