@@ -439,6 +439,13 @@ body{
   text-transform:uppercase;
   color:rgba(242,233,206,.4);
 }
+.g-build{
+  margin:.15rem 0 0;
+  font-family:var(--mono);
+  font-size:.5rem;
+  letter-spacing:.1em;
+  color:rgba(242,233,206,.22);
+}
 
 #poster{
   position:absolute; inset:0;
@@ -1249,6 +1256,10 @@ button:focus-visible{ outline:2px solid var(--ink); outline-offset:2px; }
       <p class="g-sub">Moonlight over the ancient bridge</p>
       <button id="gateBtn" type="button">Start</button>
       <p class="g-hint">Sound on</p>
+      <!-- Which build am I actually running? A 6 MB page gets cached hard, so
+           twice now a "bug" turned out to be a stale copy. document.lastModified
+           needs no maintenance and answers it at a glance. -->
+      <p class="g-build" id="buildStamp"></p>
     </div>
   </section>
 
@@ -4410,6 +4421,15 @@ var Intro = {
 /* ================================ boot ================================== */
 (function boot() {
   Game.init();
+
+  /* build stamp, so a stale cached copy is identifiable rather than mysterious */
+  (function () {
+    var el = $("buildStamp");
+    if (!el) return;
+    var d = document.lastModified;               /* when this file was built */
+    el.textContent = "build " + (d ? d.replace(/:\d\d(?=\s|$)/, "") : "unknown") +
+                     " · ppd " + FRENZY_AT;
+  })();
 
   /* The frames are sized by CSS, so at boot they have no layout yet and
      paintPoster gives up. Rather than guessing with timers, watch the frames
