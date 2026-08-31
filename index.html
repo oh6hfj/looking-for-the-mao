@@ -1362,12 +1362,11 @@ var PANDA_PAUSE_MS = 2500;
 
 /* --- upgrade tuning, all in one place ----------------------------------- */
 var WHAMMY_MULT   = 3;        /* a Mao struck again in mid-air is worth this */
-/* >>> TEMPORARY TESTING VALUE <<<
-   6 so the frenzy can be reached repeatedly while testing it. The tuned value
-   is 25: 10 fired so often it stopped feeling earned, and 25 consecutive hits
-   is a real streak given a whiff, an escape or a panda all reset the combo.
-   PUT THIS BACK TO 25 BEFORE CALLING IT DONE. */
-var FRENZY_AT     = 6;
+var FRENZY_AT     = 25;       /* combo that triggers Ping-Pong Diplomacy.
+                                 10 fired so often it stopped feeling earned;
+                                 25 consecutive hits is a real streak, since a
+                                 whiff, an escape or a panda all reset it.
+                                 Briefly set to 6 for testing — back to 25. */
 var FRENZY_MS     = 6000;
 var FRENZY_MULT   = 2;
 var FRENZY_UP     = 4;        /* Maos allowed up at once during it */
