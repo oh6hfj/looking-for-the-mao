@@ -1483,7 +1483,28 @@ button:focus-visible{ outline:2px solid var(--ink); outline-offset:2px; }
 #lessons .seal{display: inline-grid; place-items: center; width: 4.4rem; height: 4.4rem; border-radius: 8px; background: var(--vermilion); color: rgb(246, 238, 220); font-family: var(--sans); font-size: 1.35rem; line-height: 1.05; box-shadow: rgba(0, 0, 0, 0.5) 0px 6px 20px; transform: rotate(-4deg); margin: 1.4rem 0px 0.2rem;}
 #lessons .smallprint{font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(159, 176, 179, 0.6); margin: 1.6rem 0px 0px; line-height: 2;}
 @media (max-width: 420px){#lessons .lesson{grid-template-columns: 1fr; gap: 0.2rem;}#lessons .num{grid-row: auto; margin-bottom: 0.5rem;}}
-</style>
+
+/* --- the technical sheet on a phone --------------------------------------
+   The value column was nowrap so a figure would never break mid-number, but
+   that inherits into the note underneath it, and on a narrow screen the long
+   notes ran straight off the right edge - invisible, because the screen also
+   clips overflow-x. The number keeps nowrap; the note is allowed to wrap. And
+   under 560px the two-column layout stops being a table at all: each row
+   stacks, so the label sits above its value instead of fighting it for width. */
+#lessons td.v small{ white-space:normal; }
+@media (max-width:560px){
+  #lessons .sheet table, #lessons .sheet tbody, #lessons .sheet tr, #lessons .sheet td{
+    display:block; width:auto;
+  }
+  #lessons .sheet tr{ border-top:1px solid rgba(92,139,120,.28); padding:.55rem 0; }
+  #lessons .sheet tr:first-child{ border-top:0; }
+  #lessons .sheet td{ border-top:0; padding:.05rem 1rem; }
+  #lessons td.v{ text-align:left; white-space:normal; margin-top:.1rem; }
+  #lessons td.v small{ margin-top:.15rem; }
+  /* the floating Back button sits over the first line at the top of a scroll,
+     so give the sheet room to breathe under it */
+  #lessons .sheet{ margin-top:2rem; }
+}</style>
 
 <!-- ============ the six lessons, and the end credits ============ -->
 <section id="lessons" aria-hidden="true">
